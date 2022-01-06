@@ -1,0 +1,64 @@
+/* Loading Overlay */
+#overlay {
+  text-align: center;
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  background: #000;
+  opacity: 0.8;
+  filter: alpha(opacity=80);
+  z-index: 99999;
+  padding-top: 100px;
+}
+
+#ajax-loading-message {
+  color: #ccc;
+}
+
+#block-wweave-homepage-slider .owl-stage-outer .img-box{width:100%;}
+#block-wweave-homepage-slider .owl-stage-outer .img-box a,
+#block-wweave-homepage-slider .owl-stage-outer .img-box p.price{text-align:center;float:left;display:block;padding:0 20px;width:100%;color:#000;}
+#block-wweave-homepage-slider .owl-carousel .owl-nav .owl-prev{    border: 0;
+    height: 50px;
+    margin-left: -27.5px;
+    margin-top: -21.5px;
+    min-width: 0;
+    padding: 12px 14px;
+    width: 50px;
+    z-index: 1;
+    -webkit-border-radius: 50%;
+    border-radius: 50%;
+    background-clip: padding-box;
+    top: 40%;
+    right: auto;
+    bottom: auto;
+    left: 3.5%;
+    position: absolute;
+    font-size: 0px;
+    text-indent: -99px;
+    opacity:1;
+    background:#d6d6d6 url("/wweave/sites/all/themes/neutrogena<?php echo current_theme_path() ?>/images/leftarrow.png");}
+   #block-wweave-homepage-slider .owl-carousel .owl-nav .owl-next {    font-size: 0px;
+    border: 0;
+    height: 50px;
+    margin-left: -27.5px;
+    margin-top: -21.5px;
+    min-width: 0;
+    padding: 12px 17px;
+    width: 50px;
+    z-index: 1;
+    -webkit-border-radius: 50%;
+    border-radius: 50%;
+    background-clip: padding-box;
+    top: 40%;
+    right: auto;
+    bottom: auto;
+    right: 1%;
+    position: absolute;
+    text-indent:-99999px;
+    opacity:1;
+    background:#d6d6d6 url("/wweave/sites/all/themes/neutrogena<?php echo current_theme_path() ?>/images/rightarrow.png");;}
+/*#block-wweave-homepage-slider .owl-carousel .owl-nav .owl-prev:hover,
+#block-wweave-homepage-slider .owl-carousel .owl-nav .owl-next:hover{background:#d6d6d6}*/

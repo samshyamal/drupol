@@ -1,0 +1,137 @@
+<?php
+// $Id$
+
+/**
+* Display help and module information
+* @param path which path of the site we're displaying help
+* @param arg array that holds the current path as would be returned from arg() function
+* @return help text for the path
+*/
+function apachesolr_custom_results_help($path, $arg) 
+{
+	$output = '';  //declare your output variable
+	
+	switch ($path) 
+	{
+		case "admin/help#onthisdate":
+		$output = '<p>'.  t("Here is some deeply un-useful help text") .'</p>';
+		break;
+	}
+	
+	return $output;
+}
+
+
+
+
+function apachesolr_custom_results_admin()
+{
+	  $form = array();
+	
+	  $form['apachesolr_custom_results_hideauthor'] = array(
+		    '#type' => 'select',
+		    '#title' => t('Author Details'),
+		    '#default_value' => variable_get('apachesolr_custom_results_hideauthor', 'def'),
+		    '#options' => array('def' => t("Show author username"), 'hide' => t("Hide author username"), 'pic' => t("Show author avatar")),
+		    '#description' => t("Choose how the author is displayed search results")
+	  );
+	  
+	  $form['apachesolr_custom_results_showscore'] = array(
+		    '#type' => 'select',
+		    '#title' => t('Show relevancy score'),
+		    '#default_value' => variable_get('apachesolr_custom_results_showscore', 'hide'),
+		    '#options' => array('hide' => t("Hide"), 'show' => t("Show by title")),
+		    '#description' => t("Solr gives each listing a relevancy score.  You can choose to show this score to your users.")
+	  );
+	  
+	  $form['apachesolr_custom_results_shownode'] = array(
+		    '#type' => 'select',
+		    '#title' => t('Show node type'),
+		    '#default_value' => variable_get('apachesolr_custom_results_shownode', 'show'),
+		    '#options' => array('show' => t("Show"), 'hide' => t("Hide")),
+		    '#description' => t("Choose whether the node type (story, blog etc) is shown in the search results")
+	  );
+	
+	  return system_settings_form($form);
+}
+
+
+
+function apachesolr_custom_results_menu() {
+
+	  $items = array();
+	
+	  $items['admin/settings/oapachesolr_custom_results'] = array(
+		    'title' => 'Apache Solr Custom Results',
+		    'description' => 'Settings for how your Solr search results should look',
+		    'page callback' => 'drupal_get_form',
+		    'page arguments' => array('apachesolr_custom_results_admin'),
+		    'access arguments' => array('access administration pages'),
+		    'type' => MENU_NORMAL_ITEM
+	   );
+	
+	  return $items;
+}
+
+
+
+/**
+* Alters each document before search results displayed
+* @param apache_solr_document object
+* @return altered apache_solr_document object
+*/
+function apachesolr_custom_results_apachesolr_search_result_alter(&$arg)
+{
+	$show_score = variable_get("apachesolr_custom_results_showscore", 'hide');
+	
+	if($show_score == "show")
+	{
+		// append score to title
+		$arg->title .= " [".$arg->score."]";
+	}
+	
+	return $arg;
+}
+
+
+
+function apachesolr_custom_results_apachesolr_process_results(&$arg)
+{
+	// loop through each result, performing desired actions
+	for($i = 0, $l = count($arg); $i < $l; $i++)
+	{
+		$show_author = variable_get("apachesolr_custom_results_hideauthor", 'def');
+		
+		if($show_author == 'hide')
+		{
+			// remove user
+			$arg[$i]['user'] = "";
+		}
+		elseif($show_author == 'pic')
+		{
+			// show user avatar
+			$author = user_load($arg[$i]['node']->uid);
+			
+			if ($author->picture)
+			{
+				$arg[$i]['user'] = theme('user_picture', $author);
+			}
+			else
+			{
+				$arg[$i]['user'] = '<img src="/'.variable_get('user_picture_default', 'path/to/default.gif').'" alt="Default User Picture" />';
+			} 
+			
+		}
+		
+		
+		
+		$show_node_type = variable_get("apachesolr_custom_results_shownode", 'show');
+		
+		if($show_node_type == "hide")
+		{
+			// remove node type
+			$arg[$i]['type'] = "";
+		}
+		
+	}
+}

@@ -1,0 +1,61 @@
+<?php
+
+/**
+ * @file
+ * Multivariate google analytic mutation module.
+ */
+
+/**
+ * Implements hook_boot().
+ */
+function multivariate_ga_boot() {
+  $tests = multivariate_get_running_tests();
+  foreach ($tests as $test) {
+    foreach ($test->variants_set as $set_id => $set) {
+      // Check all mutations plugin in this set for the first variant.
+      foreach ($set['variants'][0]['mutations'] as $mutation_id => $mutation) {
+        if ($mutation['plugin'] == 'multivariate_ga') {
+          // Now find active variants combination.
+          $active_mutations = multivariate_get_assigned_mutations($test, $set_id);
+          // And finally from active combination select our current mutation.
+          $am = $active_mutations[$mutation_id];
+          $am_ga[] = array(
+            // GA category exists only in first variant in this set so we will
+            // take it value from there.
+            'ga_event_category' => $mutation['ga_event_category'],
+            // But GA action and label we need to take from active mutation.
+            'ga_event_action' => $am['ga_event_action'],
+            'ga_event_label' => $am['ga_event_label'],
+          );
+        }
+      }
+    }
+  }
+
+  if (!empty($am_ga)) {
+    // We are using additional js file for pushing above events so whole thing
+    // can also work with CTools ajax - problem is that CTools for now do not
+    // support inline and theme added js, only setting and module. So we are
+    // transfering our push data in Drupal.settings and then do real pushing
+    // inside loaded js file.
+    // @todo - check this for D7 port.
+    foreach ($am_ga as $am) {
+      drupal_add_js(array('multivariate_ga' => array('events' => array($am))), 'setting');
+    }
+    drupal_add_js(drupal_get_path('module', 'multivariate_ga') . '/multivariate_ga.js', array('scope' => 'footer'));
+  }
+}
+
+/**
+ * Implements hook_ctools_plugin_api().
+ */
+function multivariate_ga_ctools_plugin_api($module, $api) {
+  if ($module == 'multivariate' && $api == 'mutation') {
+    return array(
+      'version' => 1,
+      'label' => t('Google Analytics'),
+      'description' => t('Google analytics tracking.'),
+      'mutation form' => 'multivariate_ga_settings_form',
+    );
+  }
+}

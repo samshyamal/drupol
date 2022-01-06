@@ -1,0 +1,6 @@
+name = Apache Solr Custom Search Results
+description = Customise the search results from the super Apache Solr search engine.
+core = 7.x
+package = Apache Solr
+
+dependencies[] = apachesolr

@@ -1,0 +1,15 @@
+name = "GA Mutation"
+description = "Google Analytics mutation plugin for sending test tracking results to Google analytics server."
+package = "Usability testing suite"
+core = 7.x
+php = 5
+
+dependencies[] = googleanalytics
+dependencies[] = multivariate
+
+; Information added by drupal.org packaging script on 2013-10-01
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "multivariate"
+datestamp = "1380592388"
+

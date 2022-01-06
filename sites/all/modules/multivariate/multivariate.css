@@ -1,0 +1,61 @@
+
+#multivariate-form .variants-number-control {
+  overflow: auto;
+  margin: 1em 0;
+}
+
+#multivariate-form .variants-number-control .form-item {
+  float: left;
+  padding: 4px 0 0;
+  margin: 0;
+}
+
+#multivariate-form .variants-number-control .form-submit {
+  margin-left: 1em;
+}
+
+#multivariate-form .add-mutation-control {
+  margin: 2em 0 0 0;
+  overflow: auto;
+}
+
+#multivariate-form .add-mutation-control .form-item {
+  padding: 3px 0 0;
+  float: left;
+}
+
+#multivariate-form .add-mutation-control .form-submit {
+  margin-left: 8px;
+}
+
+#multivariate-form .mutation {
+  border-bottom: 1px solid #CCCCCC;
+  margin-bottom: 1em;
+  padding-bottom: 1em;
+  overflow: auto;
+}
+
+#multivariate-form .mutation-last {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+#multivariate-form .mutation .form-submit {
+  float: right;
+}
+
+#multivariate-form .remove-set-button {
+  float: right;
+}
+
+#multivariate-form .success-condition {
+  border-bottom: 1px solid #CCCCCC;
+  margin-bottom: 1em;
+  padding-bottom: 1em;
+  overflow: auto;
+}
+
+#multivariate-form .success-condition .form-submit {
+  float: right;
+}

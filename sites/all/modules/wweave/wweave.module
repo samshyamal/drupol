@@ -1,0 +1,105 @@
+<?php
+
+/**
+ * @file
+ * Enables the use of Ofbiz APIs with Drupal.
+ */
+
+require_once 'vendor/autoload.php';
+require_once 'wweave.helpers.inc';
+
+
+/**
+ * Implements hook_boot().
+ */
+function wweave_boot() {
+  wweave_setup_domain_context();
+  wweave_setup_demo_context();
+  $param = variable_get('locale_language_negotiation_session_param', 'language');
+  $language_default = variable_get('language_default', (object)array('language' => 'en'));
+  if (!empty($_COOKIE[$param])) {
+    $_SESSION[$param] = $_COOKIE[$param];
+  }
+  else {
+    $_SESSION[$param] = $language_default->language;
+  }
+}
+
+function wweave_user_presave(&$edit, $account, $category) {
+  wweave_user_integration($edit, $account);
+}
+
+function wweave_user_login(&$edit, $account) {
+  if ($account->uid == 1) {
+    // Don't do anything for 'admin'.
+    return;
+  }
+  wweave_user_integration($edit, $account, TRUE);
+}
+
+function wweave_user_integration(&$edit, $account, $skip_logged_in_check = FALSE) {
+  global $user;
+
+  if (!empty($GLOBALS['wweave_skip_user_integration']) || (!$skip_logged_in_check && !empty($user->uid))) {
+    // Skip or user is already logged in.
+    return;
+  }
+  // else, user is not logged in.
+  // /eCommerceSocialLogin?emailId=ramesh6@gmail.com
+  $client = wweave_api_client();
+  $request = 'eCommerceSocialLogin?' . http_build_query(array(
+    'emailId' => $account->mail,
+  ));
+  $response = $client->get($request);
+  $raw_json = $response->getBody();
+  $data = json_decode($raw_json, TRUE);
+  // Log the response for debugging.
+  watchdog(__FUNCTION__, print_r(compact('request', 'data'), 1));
+   
+  if (empty($account->field_party_id[LANGUAGE_NONE][0]['value']) && !empty($data['partyId'])) {
+    // Set the party ID the first time around.
+    $edit['field_party_id'][LANGUAGE_NONE][0]['value'] = $data['partyId'];
+  }
+
+  if (!empty($account->uid)) {
+    if (!$skip_logged_in_check) {
+      $user = user_load($account->uid);
+      user_login_finalize();
+    }
+    if (empty($data['_ERROR_MESSAGE_'])) {
+      $raw_headers = $response->getHeaders();
+      $_SESSION['wweave']['headers'] = $raw_headers;
+      $_SESSION['wweave']['session'] = $data;
+    }
+    else {
+      watchdog(__FUNCTION__, 'error logging in the user');
+      $user = user_load(0);
+      unset($_SESSION['wweave']);
+      drupal_session_regenerate();
+    }
+  }
+}
+
+/**
+ * Implements hook_init().
+ */
+function wweave_init() {
+  setup_krumo();
+
+  // TESTING STUFF: (TODO: ignore & delete when done!)
+  // krumo($_SESSION);
+   drupal_add_css('https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css',array('type' => 'external'));
+   drupal_add_js('https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js', 'external');
+   drupal_add_js('https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js', 'external');
+
+  // Inject FBConnect button
+  if (empty($GLOBALS['user']->uid)) {
+    $attr = array();
+    if (variable_get('fbconnect_fast_reg', 0) && variable_get('fbconnect_reg_options', 0)) {
+      $attr = array('perms' => 'email');
+    }
+    //$GLOBALS['fbconnect_login_button'] = fbconnect_login_render_button($attr);
+    $GLOBALS['user_login_form'] = drupal_get_form('user_login');
+  }
+}
+

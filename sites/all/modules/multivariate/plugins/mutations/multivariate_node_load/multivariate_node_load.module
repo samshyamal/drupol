@@ -1,0 +1,93 @@
+<?php
+
+/**
+ * @file
+ * Node load mutation module.
+ */
+
+/**
+ * Implements hook_query_TAG_alter().
+ * 
+ * Because of new entity api and it internal cache we need to change node 
+ * loading very early and it seems that query alter is the earliest event where
+ * we can chage node. Seems that this will also invalidate entity internal
+ * cache in some way so node will be loaded all the time fully.
+ * 
+ * @todo - this is maybe not the cleanest and best solution, but it seems we 
+ * can not use hook_node_load() because this hook will not allow us to change
+ * $nodes object array - we can only add/remove fields from nodes but we can
+ * not change whole nodes.
+ */
+function multivariate_node_load_query_node_load_multiple_alter(SelectQuery $query) {
+  $conditions =& $query->conditions();
+  $tests = multivariate_get_running_tests();
+  foreach ($tests as $test) {
+    foreach ($test->variants_set as $set_id => $set) {
+      foreach ($set['variants'][0]['mutations'] as $mutation_id => $mutation_plugin) {
+        if ($mutation_plugin['plugin'] == 'multivariate_node_load') {
+          $assigned_mutations = multivariate_get_assigned_mutations($test, $set_id);
+          $target_nid = $mutation_plugin['target_nid'];
+          $new_nid = $assigned_mutations[$mutation_id]['nid'];
+
+          // @todo - Quick and dirty solution, try to improve it later - can
+          // we relly that are target condition will always be on key 0?
+          foreach ($conditions[0]['value'] as $key => $nid) {
+            if ($nid == $target_nid) {
+              $conditions[0]['value'][$key] = $new_nid;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_node_load().
+ *
+ * Check above comments to see why this approach is not working in D7.
+ */
+/*function multivariate_node_load_node_load($nodes, $types) {
+  static $semaphore = FALSE;
+
+  // We use semaphore to prevent recursive callbacks that we do not need.
+  if ($semaphore) {
+    $semaphore = FALSE;
+    return;
+  }
+
+  foreach ($nodes as $key => $node) {
+    if ($node->type != 'multivariate') {
+      $tests = multivariate_get_running_tests();
+      foreach ($tests as $test) {
+        foreach ($test->variants_set as $set_id => $set) {
+          foreach ($set['variants'][0]['mutations'] as $mutation_id => $mutation_plugin) {
+            if ($mutation_plugin['plugin'] == 'multivariate_node_load') {
+              $assigned_mutations = multivariate_get_assigned_mutations($test, $set_id);
+              $nid = $assigned_mutations[$mutation_id]['nid'];
+              // Do loading only if this is different node.
+              if ($nid != $node->nid) {
+                $semaphore = TRUE;
+                $nodes[] = node_load($assigned_mutations[$mutation_id]['nid']);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}*/
+
+/**
+ * Implements hook_ctools_plugin_api().
+ */
+function multivariate_node_load_ctools_plugin_api($module, $api) {
+  if ($module == 'multivariate' && $api == 'mutation') {
+    return array(
+      'version' => 1,
+      'label' => t('Node load'),
+      'description' => t('Node load mutation.'),
+      'mutation form' => 'multivariate_node_load_settings_form',
+    );
+  }
+}

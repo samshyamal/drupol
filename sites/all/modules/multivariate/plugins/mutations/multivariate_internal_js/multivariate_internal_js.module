@@ -1,0 +1,44 @@
+<?php
+
+/**
+ * @file
+ * Module file for Internal Javascript mutation.
+ */
+
+/**
+ * Implements hook_boot().
+ */
+function multivariate_internal_js_boot() {
+  $tests = multivariate_get_running_tests();
+  foreach ($tests as $test) {
+    foreach ($test->variants_set as $set_id => $set) {
+      foreach ($set['variants'][0]['mutations'] as $mutation_id => $mutation) {
+        if ($mutation['plugin'] == 'multivariate_internal_js') {
+          $active_mutations = multivariate_get_assigned_mutations($test, $set_id);
+          // We need to put our internal js on the end so it is the strongest.
+          drupal_add_js('jQuery(document).ready(function ($) {' . $active_mutations[$mutation_id]['internal_js'] . '});',
+            array(
+              'type' => 'inline',
+              'scope' => $active_mutations[$mutation_id]['internal_js_scope'],
+              'weight' => 1000,
+              'cache' => FALSE)
+          );
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_ctools_plugin_api().
+ */
+function multivariate_internal_js_ctools_plugin_api($module, $api) {
+  if ($module == 'multivariate' && $api == 'mutation') {
+    return array(
+      'version' => 1,
+      'label' => t('Internal Javascript'),
+      'description' => t('Internal Javascript mutation.'),
+      'mutation form' => 'multivariate_internal_js_settings_form',
+    );
+  }
+}

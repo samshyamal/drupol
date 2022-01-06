@@ -1,0 +1,14 @@
+name = Form submit success condition
+description = Form submit success condition plugin.
+package = Usability testing suite
+core = 7.x
+php = 5
+
+dependencies[] = multivariate
+
+; Information added by drupal.org packaging script on 2013-10-01
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "multivariate"
+datestamp = "1380592388"
+

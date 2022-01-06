@@ -1,0 +1,66 @@
+<?php
+
+/**
+ * @file
+ * Form submit success condition module.
+ */
+
+/**
+ * Implements hook_form_alter().
+ */
+function multivariate_form_submit_sc_form_alter(&$form, &$form_state, $form_id) {
+  // We are loading all enabled studies here because generaly we cannot relay
+  // that success context will be the same like running context.
+  $tests = multivariate_get_enabled();
+  foreach ($tests as $test) {
+    if ($test->success_condition) {
+      foreach ($test->success_condition as $sc_id => $sc) {
+        if ($sc['plugin'] == 'multivariate_form_submit_sc'
+         && $sc['form_id'] == $form_id
+         // We really need to add success submit handler only ones here so check
+         // first if some other test added this handler already.
+         && !in_array('multivariate_form_submit_submit', $form['#submit'])) {
+          $form['#submit'][] = 'multivariate_form_submit_submit';
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Form submit handler.
+ */
+function multivariate_form_submit_submit($form, &$form_state) {
+  // We are loading all enabled studies here because generaly we cannot relay
+  // that success context will be the same like running context.
+  $tests = multivariate_get_enabled();
+  foreach ($tests as $test) {
+    if ($test->success_condition) {
+      foreach ($test->success_condition as $sc_id => $sc) {
+        if ($sc['plugin'] == 'multivariate_form_submit_sc'
+         && $sc['form_id'] == $form['form_id']['#value']
+         // If we are messuring form submit only when rebuild_disabled is
+         // enabled then we will count this submit as success only if form is
+         // not in rebuild state.
+         && (!$sc['rebuild_disabled'] || ($sc['rebuild_disabled'] && !$form_state['rebuild']))
+         && ($mutation = multivariate_get_assigned_test($test, FALSE))) {
+          multivariate_store_success($test->mtid, $mutation['mutation_id']);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_ctools_plugin_api().
+ */
+function multivariate_form_submit_sc_ctools_plugin_api($module, $api) {
+  if ($module == 'multivariate' && $api == 'success_condition') {
+    return array(
+      'version' => 1,
+      'label' => t('Form submit'),
+      'description' => t('Form submit success condition.'),
+      'sc form' => 'multivariate_form_submit_sc_settings_form',
+    );
+  }
+}

@@ -1,0 +1,54 @@
+<?php
+
+/**
+ * @file
+ * Multivariate path mutation module.
+ */
+
+/**
+ * Implements hook_boot(). 
+ */
+function multivariate_path_mutation_boot() {
+  // @todo: D6/7 future. It is becoming more and more obvious that we need
+  // both plugins support here - simple plugins with event&trigger support
+  // and for this plugins we could offer support for events like hook_boot,
+  // hook_init and couple of mores.
+  // For anything more complex or for events that we do not support we will
+  // support modyle plugins (that are modules) via ctools_plugins_api.
+  $tests = multivariate_get_running_tests();
+  foreach ($tests as $test) {
+    foreach ($test->variants_set as $set_id => $set) {
+      foreach ($set['variants'][0]['mutations'] as $mutation_id => $mutation_plugin) {
+        if ($mutation_plugin['plugin'] == 'multivariate_path_mutation') {
+          $active_mutations = multivariate_get_assigned_mutations($test, $set_id);
+          $mutation_path = $active_mutations[$mutation_id]['path'];
+          // If mutation path has * operator we need to change that operator
+          // with values from URL - pattern for this should be set in condition path.
+          if (strpos($mutation_path, '*') !== FALSE) {
+            $mutation_path = multivariate_process_url_operator($test, $mutation_path);
+          }
+          $_GET['q'] = $mutation_path;
+          // We also need to set $_REQUEST['q'] so globalredirect and other
+          // modules that works with $_REQUEST['q'] are fine.
+          $_REQUEST['q'] = $mutation_path;
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_ctools_plugin_api().
+ */
+function multivariate_path_mutation_ctools_plugin_api($module, $api) {
+  if ($module == 'multivariate' && $api == 'mutation') {
+    return array(
+      'version' => 1,
+      'label' => t('Path mutation'),
+      'description' => t('Path mutation plugin - change current system path.'),
+      // @todo - maybe rename this to 'settings form' for D7 port, for better
+      // consistency?
+      'mutation form' => 'multivariate_path_mutation_settings_form',
+    );
+  }
+}

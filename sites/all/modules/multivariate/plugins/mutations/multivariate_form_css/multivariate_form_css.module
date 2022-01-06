@@ -1,0 +1,43 @@
+<?php
+
+/**
+ * @file
+ * Form CSS mutation module.
+ */
+
+/**
+ * Implements hook_form_alter().
+ */
+function multivariate_form_css_form_alter(&$form, &$form_state, $form_id) {
+  $tests = multivariate_get_running_tests();
+  foreach ($tests as $test) {
+    foreach ($test->variants_set as $set_id => $set) {
+      foreach ($set['variants'][0]['mutations'] as $mutation_id => $mutation) {
+        if ($mutation['plugin'] == 'multivariate_form_css' && $mutation['form_id'] == $form_id) {
+          $active_mutations = multivariate_get_assigned_mutations($test, $set_id);
+          $form['#attributes']['class'][] = check_plain($active_mutations[$mutation_id]['form_css_classes']);
+          if (!empty($form['#attributes']['style'])) {
+            $form['#attributes']['style'] .= ' ' . check_plain($active_mutations[$mutation_id]['form_inline_css']);
+          }
+          else {
+            $form['#attributes']['style'] = check_plain($active_mutations[$mutation_id]['form_inline_css']);
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_ctools_plugin_api().
+ */
+function multivariate_form_css_ctools_plugin_api($module, $api) {
+  if ($module == 'multivariate' && $api == 'mutation') {
+    return array(
+      'version' => 1,
+      'label' => t('Form CSS'),
+      'description' => t('Form CSS classes and inline style mutation.'),
+      'mutation form' => 'multivariate_form_css_settings_form',
+    );
+  }
+}

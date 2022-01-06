@@ -1,0 +1,66 @@
+<?php
+
+/**
+ * @file
+ * Multivariate path redirection mutation module.
+ */
+
+/**
+ * Implements hook_boot(). 
+ */
+function multivariate_path_redirection_boot() {
+  global $cookie_domain;
+
+  $tests = multivariate_get_running_tests();
+  foreach ($tests as $test) {
+    foreach ($test->variants_set as $set_id => $set) {
+      foreach ($set['variants'][0]['mutations'] as $mutation_id => $mutation) {
+        if ($mutation['plugin'] == 'multivariate_path_redirection') {
+          // Set a cookie so that users coming back to this page will receive
+          // the same redirection.
+          // Set the cookie just for this URL on this page.
+          // This cookie is also important to set if you use a reverse proxy
+          // like Varnish.
+          //
+          // @todo: Not sure how this cookie exactly works and do we
+          // need to port this to multivariate_disable_cache() and use for
+          // all test cases?
+          setcookie('NO_CACHE', 'Y', MULTIVARIATE_COOKIE_DURATION, request_uri(), $cookie_domain);
+
+          // Find the URL for selected variant set.
+          $active_mutations = multivariate_get_assigned_mutations($test, $set_id);
+          $url = trim($active_mutations[$mutation_id]['path']);
+          if (!empty($url)) {
+            // If mutation path has * operator we need to change that operator
+            // with values from URL - pattern for this should be set in
+            // condition path.
+            if (strpos($url, '*') !== FALSE) {
+              $url = multivariate_process_url_operator($test, $url);
+            }
+
+            // Redrect only if we are not already on the same URL.
+            if (!multivariate_match_current_path($url)) {
+              // Use query array in case there are GA or
+              // SiteCatalyst GET params.
+              drupal_goto($url, array('query' => drupal_get_query_parameters()));
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_ctools_plugin_api().
+ */
+function multivariate_path_redirection_ctools_plugin_api($module, $api) {
+  if ($module == 'multivariate' && $api == 'mutation') {
+    return array(
+      'version' => 1,
+      'label' => t('Path redirection'),
+      'description' => t('Path redirection mutation.'),
+      'mutation form' => 'multivariate_path_redirection_settings_form',
+    );
+  }
+}

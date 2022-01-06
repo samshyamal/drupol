@@ -1,0 +1,41 @@
+<?php
+
+/**
+ * @file
+ * Multivariate internal CSS mutation module.
+ */
+
+/**
+ * Implements hook_boot().
+ */
+function multivariate_internal_css_boot() {
+  $tests = multivariate_get_running_tests();
+  foreach ($tests as $test) {
+    foreach ($test->variants_set as $set_id => $set) {
+      foreach ($set['variants'][0]['mutations'] as $mutation_id => $mutation) {
+        if ($mutation['plugin'] == 'multivariate_internal_css') {
+          $active_mutations = multivariate_get_assigned_mutations($test, $set_id);
+          if (!empty($active_mutations[$mutation_id]['internal_css'])) {
+            // We need to put our internal css on end so it is the strongest.
+            drupal_add_css($active_mutations[$mutation_id]['internal_css'],
+              array('type' => 'inline', 'weight' => 1000, 'group' => CSS_THEME));
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_ctools_plugin_api().
+ */
+function multivariate_internal_css_ctools_plugin_api($module, $api) {
+  if ($module == 'multivariate' && $api == 'mutation') {
+    return array(
+      'version' => 1,
+      'label' => t('Internal CSS'),
+      'description' => t('Internal CSS mutation.'),
+      'mutation form' => 'multivariate_internal_css_settings_form',
+    );
+  }
+}

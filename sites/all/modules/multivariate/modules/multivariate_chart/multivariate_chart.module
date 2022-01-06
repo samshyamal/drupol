@@ -1,0 +1,38 @@
+<?php
+
+/**
+ * @file
+ * Provides multivariate result charting.
+ */
+
+/**
+ * Implements hook_ENTITY_view().
+ */
+function multivariate_chart_multivariate_test_view($entity, $view_mode, $langcode) {
+  // Add css and js files for our jqplot charts.
+  $path = libraries_get_path('jqplot');
+  $iesupport = array(
+    '#type' => 'markup',
+    '#markup' => '<!--[if lt IE 9]>
+      <script language="javascript"
+      type="text/javascript" src="' . $path . '/excanvas.js">
+      </script><![endif]--> ',
+  );
+  drupal_add_html_head($iesupport, 'multivariate');
+  drupal_add_js($path . '/jquery.jqplot.min.js');
+  drupal_add_js($path . '/plugins/jqplot.barRenderer.min.js');
+  drupal_add_js($path . '/plugins/jqplot.categoryAxisRenderer.min.js');
+  drupal_add_js($path . '/plugins/jqplot.pointLabels.min.js');
+  drupal_add_css($path . '/jquery.jqplot.min.css');
+
+  drupal_add_js(drupal_get_path('module', 'multivariate_chart') . '/multivariate_chart.js');
+  drupal_add_css(drupal_get_path('module', 'multivariate_chart') . '/multivariate_chart.css');
+  drupal_add_js(array('multivariate_chart' => array('data' => $entity->multivariate_results)), 'setting');
+
+  $bars_num = count($entity->multivariate_results);
+  $height = $bars_num * 150;
+  $entity->content['chart'] = array(
+    'title' => array('#markup' => '<h3>' . t('Chart results (ratio)') . '</h3>'),
+    'chart' => array('#markup' => '<div id="multivariate-chart" style="height:' . $height . 'px;"></div>'),
+  );
+}

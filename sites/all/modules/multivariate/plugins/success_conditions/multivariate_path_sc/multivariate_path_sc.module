@@ -1,0 +1,57 @@
+<?php
+
+/**
+ * @file
+ * Multivariate path sucecss condition module.
+ */
+
+/**
+ * Implements hook_boot().
+ */
+function multivariate_path_sc_boot() {
+  // Get the system URL and any aliases for the curent URL.
+  $urls = array($_GET['q']);
+  $alias = drupal_get_path_alias();
+  if ($alias != $_GET['q']) {
+    $urls[] = $alias;
+  }
+
+  // We are loading all enabled studies here because generaly we cannot relay
+  // that success context will be the same like running context.
+  $tests = multivariate_get_enabled();
+  foreach ($tests as $test) {
+    if ($test->success_condition) {
+      foreach ($test->success_condition as $sc_id => $sc) {
+        if ($sc['plugin'] == 'multivariate_path_sc') {
+          $page_match = FALSE;
+
+          foreach ($urls as $url) {
+            $page_match = drupal_match_path(strtolower($url), $sc['system_path']);
+            if ($page_match) {
+              break;
+            }
+          }
+
+          if ($page_match && ($mutation = multivariate_get_assigned_test($test, FALSE))) {
+            multivariate_store_success($test->mtid, $mutation['mutation_id']);
+            break;
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_ctools_plugin_api().
+ */
+function multivariate_path_sc_ctools_plugin_api($module, $api) {
+  if ($module == 'multivariate' && $api == 'success_condition') {
+    return array(
+      'version' => 1,
+      'label' => t('Path'),
+      'description' => t('Path success condition.'),
+      'sc form' => 'multivariate_path_sc_settings_form',
+    );
+  }
+}

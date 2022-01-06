@@ -1,0 +1,20 @@
+name = wweave
+description = A flexible, responsive theme.
+version = 7.x-1.0
+core = 7.x
+
+stylesheets[all][] = css/bootstrap.min.css
+stylesheets[all][] = css/ww_styles.css
+stylesheets[all][] = css/responsive.css
+stylesheets[all][] = css/mdb.min.css
+
+
+scripts[] = js/jquery.min.js
+scripts[] = js/bootstrap.min.js
+scripts[] = js/main.js
+scripts[] = js/material-components-web.min.js
+
+regions[content] = Content
+regions[search_filter_sidebar] = Search Filter Sidebar
+regions[social_sharing] = Social Sharing
+

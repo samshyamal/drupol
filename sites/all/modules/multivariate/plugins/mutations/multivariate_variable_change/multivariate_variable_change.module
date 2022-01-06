@@ -1,0 +1,65 @@
+<?php
+
+/**
+ * @file
+ * Multivariate variable change mutation module.
+ */
+
+/**
+ * Implements hook_boot(). 
+ */
+function multivariate_variable_change_boot() {
+  global $conf;
+
+  $tests = multivariate_get_running_tests();
+  foreach ($tests as $test) {
+    foreach ($test->variants_set as $set_id => $set) {
+      foreach ($set['variants'][0]['mutations'] as $mutation_id => $mutation) {
+        if ($mutation['plugin'] == 'multivariate_variable_change') {
+          $active_mutations = multivariate_get_assigned_mutations($test, $set_id);
+          $conf[$mutation['variable_name']] = $active_mutations[$mutation_id]['variable_value'];
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_menu().
+ */
+function multivariate_variable_change_menu() {
+  $items['multivariate_variable/autocomplete'] = array(
+    'title' => 'Multivariate variable mutation autocomplete',
+    'page callback' => 'multivariate_variable_autocomplete',
+    'access arguments' => array('administer multivariate studies'),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_ctools_plugin_api().
+ */
+function multivariate_variable_change_ctools_plugin_api($module, $api) {
+  if ($module == 'multivariate' && $api == 'mutation') {
+    return array(
+      'version' => 1,
+      'label' => t('Variable change'),
+      'description' => t('Variable change mutation.'),
+      'mutation form' => 'multivariate_variable_change_settings_form',
+    );
+  }
+}
+
+/**
+ * Menu callback.
+ */
+function multivariate_variable_autocomplete($name = '') {
+  $matches = array();
+  if ($name) {
+    // @todo: instead of using db, we can probably query global $conf.
+    $matches = db_query("SELECT name, name FROM {variable} WHERE LOWER(name) LIKE LOWER(:var)",
+      array(':var' => db_like($name) . '%'))->fetchAllKeyed();
+  }
+  drupal_json_output($matches);
+}

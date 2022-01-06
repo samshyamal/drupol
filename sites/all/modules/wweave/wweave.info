@@ -1,0 +1,6 @@
+name = "wweave"
+description = "Drupal and Ofbiz Integration module."
+package = Sonata
+core = 7.x
+version = "7.x-1.0"
+project = "wweave"

@@ -1,0 +1,1023 @@
+<?php
+
+/**
+ * @file
+ * Provides multivariate testing utility.
+ */
+
+define('MULTIVARIATE_COOKIE_DURATION', (REQUEST_TIME + (45 * 86400)));
+
+define('MULTIVARIATE_MINIMUM_VERSION', 1);
+define('MULTIVARIATE_VERSION', 1);
+
+/**
+ * Implements hook_entity_info().
+ */
+function multivariate_entity_info() {
+  $return = array(
+    'multivariate_test' => array(
+      'label' => t('Multivariate Test'),
+      'entity class' => 'MultivariateTest',
+      'controller class' => 'MultivariateTestController',
+      'base table' => 'multivariate_test',
+      'fieldable' => FALSE,
+      'exportable' => TRUE,
+      'entity keys' => array(
+        'id' => 'mtid',
+      ),
+      // @todo - this part need clearing - do we need bundles or not, can we add
+      // fields or not, do we support exporting or not...
+      /*'bundles' => array(
+        'multivariate' => array(
+          'label' => t('Multivariate Test'),
+          'admin' => array(
+            'path' => 'admin/structure/multivariate',
+            'access arguments' => array('administer multivariate studies'),
+          ),
+        ),
+      ),*/
+      'load hook' => 'multivariate_test_load',
+      'view modes' => array(
+        'full' => array(
+          'label' => t('Default'),
+          'custom settings' => FALSE,
+        ),
+      ),
+      'label callback' => 'entity_class_label',
+      'uri callback' => 'entity_class_uri',
+      'module' => 'multivariate',
+      // Enable the entity API's admin UI.
+      /*'admin ui' => array(
+        'path' => 'admin/structure/multivariate',
+        'file' => 'multivariate.admin.inc',
+        'controller class' => 'MultivariateUIController',
+      ),*/
+      'access callback' => 'multivariate_access',
+    ),
+  );
+
+  return $return;
+}
+
+/**
+ * Implements hook_boot().
+ * 
+ * We need to do couple of things in hook_boot():
+ * - Initialize all parts of Drupal core that are not initialized in boot 
+ *   and that our multivariate core and plugins needs.
+ * - Checks if we have tests that we need to run in current context.
+ * - Finally if we have running tests we need to disable Drupal caching so
+ *   our multivariate tests can work for anyonimus users also.
+ */
+function multivariate_boot() {
+  multivariate_initialize_drupal();
+  // @todo - we need event/trigger support for simple mutation/success plugins.
+  $running_studies = multivariate_get_running_tests();
+  if (!empty($running_studies)) {
+    // If we have running studies in current context we need to disable cache.
+    multivariate_disable_cache();
+  }
+}
+
+/**
+ * Implements hook_menu().
+ */
+function multivariate_menu() {
+  $items = array();
+
+  $items['multivariate'] = array(
+    'title' => 'Multivariate tests',
+    'page callback' => 'multivariate_list',
+    'access arguments' => array('administer multivariate studies'),
+    'file' => 'multivariate.admin.inc',
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  // @todo - fix this, currently it is not showing.
+  $items['multivariate/list'] = array(
+    'title' => 'List',
+    'description' => 'List multivariate studies',
+    'page callback' => 'multivariate_list',
+    'access arguments' => array('administer multivariate studies'),
+    'file' => 'multivariate.admin.inc',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => 0,
+  );
+
+  $items['multivariate/add'] = array(
+    'title' => 'Add multivariate test',
+    'page callback' => 'multivariate_add',
+    'access arguments' => array('administer multivariate studies'),
+    'file' => 'multivariate.admin.inc',
+    'type' => MENU_LOCAL_ACTION,
+    'tab_parent' => 'multivariate',
+    'tab_root' => 'multivariate',
+  );
+
+  $multivariate_uri = 'multivariate/%multivariate';
+  $multivariate_uri_argument_position = 1;
+
+  $items[$multivariate_uri] = array(
+    'title callback' => 'entity_label',
+    'title arguments' => array('multivariate_test', $multivariate_uri_argument_position),
+    'page callback' => 'multivariate_view',
+    'page arguments' => array($multivariate_uri_argument_position),
+    'access callback' => 'entity_access',
+    'access arguments' => array('view', 'multivariate_test', $multivariate_uri_argument_position),
+    'file' => 'multivariate.pages.inc',
+  );
+
+  $items[$multivariate_uri . '/view'] = array(
+    'title' => 'View',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -10,
+  );
+
+  $items[$multivariate_uri . '/delete'] = array(
+    'title' => 'Delete multivariate test',
+    'title callback' => 'multivariate_label',
+    'title arguments' => array($multivariate_uri_argument_position),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('multivariate_delete_form', $multivariate_uri_argument_position),
+    'access callback' => 'entity_access',
+    'access arguments' => array('edit', 'multivariate_test', $multivariate_uri_argument_position),
+    'file' => 'multivariate.admin.inc',
+  );
+
+  $items[$multivariate_uri . '/edit'] = array(
+    'title' => 'Edit',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('multivariate_form', $multivariate_uri_argument_position),
+    'access callback' => 'entity_access',
+    'access arguments' => array('edit', 'multivariate_test', $multivariate_uri_argument_position),
+    'file' => 'multivariate.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+    'context' => MENU_CONTEXT_PAGE | MENU_CONTEXT_INLINE,
+  );
+
+  $items['admin/config/multivariate'] = array(
+    'title' => 'Multivariate',
+    'description' => 'Multivariate configuration',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('multivariate_override_settings_form'),
+    'access arguments' => array('administer site configuration'),
+    'file' => 'multivariate.admin.inc',
+  );
+  $items['admin/config/multivariate/override'] = array(
+    'title' => 'Override Tests',
+    'description' => 'Override assigned multivariate tests',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('multivariate_override_settings_form'),
+    'access arguments' => array('administer site configuration'),
+    'file' => 'multivariate.admin.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_admin_paths().
+ */
+function multivariate_admin_paths() {
+  $paths = array(
+    'multivariate' => TRUE,
+    'multivariate/*' => TRUE,
+  );
+  return $paths;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function multivariate_permission() {
+  $permissions = array(
+    'administer multivariate studies' => array(
+      'title' => t('Administer multivariate studies'),
+      'description' => t('Allows users to administer multivariate studies.'),
+      'restrict access' => TRUE,
+    ),
+    'view multivariate studies results' => array(
+      'title' => t('View multivariate studies results'),
+      'description' => t('Allows users to view multivariate studies.'),
+      'restrict access' => TRUE,
+    ),
+  );
+  return $permissions;
+}
+
+/**
+ * Implements hook_entity_property_info_alter().
+ */
+function multivariate_entity_property_info_alter(&$info) {
+  $properties = &$info['multivariate_test']['properties'];
+  $properties['created'] = array(
+    'label' => t('Date created'),
+    'type' => 'date',
+    'description' => t('The date the multivariate study was created.'),
+    'setter callback' => 'entity_property_verbatim_set',
+    'setter permission' => 'administer multivariate studies',
+    'schema field' => 'created',
+  );
+  $properties['changed'] = array(
+    'label' => t('Date changed'),
+    'type' => 'date',
+    'schema field' => 'changed',
+    'description' => t('The date the multivariate study was most recently updated.'),
+  );
+  $properties['user'] = array(
+    'label' => t('Author'),
+    'type' => 'user',
+    'description' => t('The author of the multivariate study.'),
+    'setter callback' => 'entity_property_verbatim_set',
+    'setter permission' => 'administer multivariate studies',
+    'required' => TRUE,
+    'schema field' => 'uid',
+  );
+  $properties['enabled'] = array(
+    'label' => t('Enabled'),
+    'type' => 'boolean',
+    'schema field' => 'enabled',
+    'description' => t('Flag indicating is multivariate test enabled or disabled.'),
+  );
+}
+
+/**
+ * Implements hook_views_api().
+ */
+function multivariate_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'multivariate'),
+  );
+}
+
+/**
+ * Implements hook_theme().
+ */
+function multivariate_theme() {
+  return array(
+    'multivariate_result_label' => array(
+      'variables' => array('test' => NULL, 'set_id' => NULL, 'variant_id' => NULL),
+      'file' => 'multivariate.theme.inc',
+    ),
+    'multivariate_result_labels' => array(
+      'variables' => array('labels' => NULL),
+      'file' => 'multivariate.theme.inc',
+    ),
+  );
+}
+
+/* Helpers */
+
+/**
+ * Initialize everything that is needed so multivariate tests can be run in 
+ * hook_boot().
+ */
+function multivariate_initialize_drupal() {
+  // If ctools plugin context cache do not exist we need to init couple of
+  // more stuff so ctools access plugin can init it self correctly.
+  if (!cache_get('ctools_plugin_files:ctools:contexts')) {
+    // When ctools context plugin cache do not exist we need to initialize
+    // Drupal fully so we can query for running tests with ctools_access in
+    // hook_boot() and also run tests in hook_boot().
+    // Note that this needs to be done only for first request that is hitting
+    // missing ctools context plugin cache.
+    require_once DRUPAL_ROOT . '/includes/common.inc';
+    drupal_bootstrap(DRUPAL_BOOTSTRAP_LANGUAGE);
+    drupal_bootstrap(DRUPAL_BOOTSTRAP_FULL);
+  }
+  else {
+    // For situations when ctools context plugin cache exist we still need to
+    // initialize some parts of the Drupal in hook_boot() so ctooks_access() and
+    // tests can run in hook_boot().
+
+    // We are including path.inc because ctools_access will need
+    // drupal_get_path_alias().
+    require_once DRUPAL_ROOT . '/' . variable_get('path_inc', 'includes/path.inc');
+
+    // We are including theme.inc and file.inc so any ctools plugins using
+    // list_themes() won't throw a Fatal error.
+    // @SEE https://www.drupal.org/node/1949122
+    require_once DRUPAL_ROOT . '/includes/theme.inc';
+    require_once DRUPAL_ROOT . '/includes/file.inc';
+
+    // We are including commons.inc because ctools_access will need
+    // drupal_get_path().
+    require_once DRUPAL_ROOT . '/includes/common.inc';
+
+    // Needed by entity_get_info() which will be callen by ctools_access().
+    drupal_language_initialize();
+
+    // Although $_GET['q'] is initialized very early in bootstrap with
+    // request_path() call this is something we can not use for mutlivariate
+    // tests. Running ctools_access path conditions, mutation and success
+    // plugins needs fully initialized $_GET['q'] which is done with
+    // drupal_path_initialize() during full bootstrap phase.
+    drupal_path_initialize();
+
+    // We need to load all modules so ctools_access can work correctly for
+    // different conditions. For example if we add path condition which is
+    // 'node/1' this path condition will try to load this node over entity api,
+    // but because we are running this inside hook_boot only modules with
+    // hook_boot and hook_exit() will be loaded and we will get fatal error
+    // because Drupal can not find node entity class.
+    //
+    // @todo - check is there some better solution for this, for example can we
+    // maybe just load modules that are adding entities and defining ctools
+    // plugins that we need.
+    module_load_all();
+  }
+}
+
+/**
+ * Access callback for task.
+ */
+function multivariate_access($op, $task, $account = NULL, $entity_type = NULL) {
+  global $user;
+
+  if (!isset($account)) {
+    $account = $user;
+  }
+  switch ($op) {
+    case 'create':
+      return user_access('administer multivariate studies', $account);
+
+    case 'view':
+      return user_access('administer multivariate studies', $account)
+          || user_access('view multivariate studies results', $account);
+    case 'edit':
+      return user_access('administer multivariate studies');
+  }
+}
+
+/**
+ * Load multivariate test.
+ */
+function multivariate_load($mtid, $reset = FALSE) {
+  $studies = multivariate_load_multiple(array($mtid), array(), $reset);
+  return reset($studies);
+}
+
+/**
+ * Load multiple multivariate tests based on certain conditions.
+ */
+function multivariate_load_multiple($mtids = array(), $conditions = array(), $reset = FALSE) {
+  return entity_load('multivariate_test', $mtids, $conditions, $reset);
+}
+
+/**
+ * Save multivariate test.
+ */
+function multivariate_save($test) {
+  // @todo - check if there is a better place for this?
+  // First lets calculate all posible combinations - we do this before actual
+  // save so we can compared previously saved test with new changes (if this
+  // is update of test), so if there are no changes we don't need to recalculate
+  // things.
+  if (isset($test->mtid)) {
+    multivariate_calculate_combinations($test);
+    entity_save('multivariate_test', $test);
+  }
+  else {
+    entity_save('multivariate_test', $test);
+    multivariate_calculate_combinations($test, TRUE);
+  }
+}
+
+/**
+ * Delete single task.
+ */
+function multivariate_delete($test) {
+  entity_delete('multivariate_test', entity_id('multivariate_test', $test));
+}
+
+/**
+ * Delete multiple tasks.
+ */
+function multivariate_delete_multiple($tests_ids) {
+  entity_delete_multiple('multivariate_test', $tests_ids);
+}
+
+/**
+ * Callback for condition context plugins access control ajax form.
+ *
+ * Returns the cached conditions config and contexts used.
+ */
+function multivariate_ctools_access_get($argument) {
+  ctools_include('object-cache');
+  $cache = ctools_object_cache_get('multivariate', $argument);
+  if (!$cache) {
+    $cache = array();
+  }
+
+  $contexts = array();
+
+  return array($cache, $contexts);
+}
+
+/**
+ * Callback for condition context plugins access control ajax form.
+ *
+ * Writes the changed conditions to the cache.
+ */
+function multivariate_ctools_access_set($argument, $cache) {
+  ctools_include('object-cache');
+  ctools_object_cache_set('multivariate', $argument, $cache);
+}
+
+/**
+ * Callback for condition context plugins access control ajax form.
+ *
+ * Clears conditions configurations from the cache.
+ */
+function multivariate_ctools_access_clear($argument) {
+  ctools_include('object-cache');
+  ctools_object_cache_clear('multivariate', $argument);
+}
+
+/**
+ * Get an array of information about modules that support an API.
+ * 
+ * @param string $api
+ *   Name of the API.
+ * 
+ * @return array
+ *   An array of API information, keyed by module.
+ * 
+ * @see ctools_plugin_api_info()
+ */
+function multivariate_api_info($api) {
+  ctools_include('plugins');
+  return ctools_plugin_api_info('multivariate', $api, MULTIVARIATE_MINIMUM_VERSION, MULTIVARIATE_VERSION);
+}
+
+/**
+ * Load a group of API files.
+ * 
+ * @param string $api
+ *   Name of the API,
+ *
+ * @return array
+ *   An array of API information, keyed by module.
+ * 
+ * @see ctools_plugin_api_include()
+ */
+function multivariate_include_api($api) {
+  ctools_include('plugins');
+  return ctools_plugin_api_include('multivariate', $api, MULTIVARIATE_MINIMUM_VERSION, MULTIVARIATE_VERSION);
+}
+
+/**
+ * Call mutation plugin function.
+ * 
+ * @param string $plugin_id
+ *   Plugin Id.
+ * @param string $function_name
+ *   Plugin function name.
+ * @param array $args
+ *   Arguments to pass to plugin function.
+ * 
+ * @return mixed
+ *   Return result from plugin function or FALSE if function does not exist.
+ */
+function multivariate_plugin_mutation_execute($plugin_id, $function_name, $args = array()) {
+  // @todo: port, low - we could try to be smarter here and include only plugin
+  // that we need and not all api plugins.
+  multivariate_include_api('mutation');
+  if (function_exists($function_name)) {
+    return call_user_func_array($function_name, $args);
+  }
+  return FALSE;
+}
+
+/**
+ * Call multivariation plugin function.
+ * 
+ * @param string $plugin_id
+ *   Plugin Id.
+ * @param string $function_name
+ *   Plugin function name.
+ * @param array $args
+ *   Arguments to pass to plugin function.
+ * 
+ * @return mixed
+ *   Return result from plugin function or FALSE if function does not exist.
+ */
+function multivariate_plugin_success_condition_execute($plugin_id, $function_name, $args = array()) {
+  multivariate_include_api('success_condition');
+  if (function_exists($function_name)) {
+    return call_user_func_array($function_name, $args);
+  }
+  return FALSE;
+}
+
+/**
+ * Store a success for a mutation.
+ *
+ * After storing the success the mutation will be marked as completed and
+ * will no store any further successes.
+ *
+ * @param int $mtid
+ *   Multivariate test id.
+ * @param int $mcid
+ *   Mutation ID to store a success for.
+ */
+function multivariate_store_success($mtid, $mcid) {
+  global $cookie_domain;
+
+  // If this test is overriden just return.
+  // @todo - we can store override flag also in base cookie that we are using
+  // so we keep everything nice and clean.
+  if (isset($_COOKIE['multivariate_' . $mtid . '_override'])) {
+    return;
+  }
+
+  if (isset($_COOKIE['multivariate_' . $mtid])) {
+    $test_cookie = unserialize($_COOKIE['multivariate_' . $mtid]);
+    if ($test_cookie['completed'] == FALSE) {
+      db_query('UPDATE {multivariate_combination}
+        SET success = success + 1
+        WHERE mtid = :mtid
+        AND mcid = :mcid',
+        array(':mtid' => $mtid, ':mcid' => $mcid));
+      $test_cookie['completed'] = TRUE;
+      $serialized_test_cookie = serialize($test_cookie);
+      setcookie('multivariate_' . $mtid, $serialized_test_cookie, MULTIVARIATE_COOKIE_DURATION, '/', $cookie_domain);
+      // Set it for current request also - just in case that for some reason
+      // multivariate_store_success() is called for same test and same mutation
+      // id we are then sure that we will not do multiple success stores in the
+      // same request.
+      $_COOKIE['multivariate_' . $mtid] = $serialized_test_cookie;
+    }
+  }
+}
+
+/**
+ * Returns all enabled and running studies objects in current context.
+ * 
+ * @return array
+ *   Array of all enabled and running studies objects in current context.
+ */
+function multivariate_get_running_tests() {
+  static $running_tests = NULL;
+
+  if (isset($running_tests)) {
+    return $running_tests;
+  }
+
+  ctools_include('context');
+  $running_tests = array();
+  foreach (multivariate_get_enabled() as $test) {
+    if (!empty($test->run_condition['plugins']) && ctools_access($test->run_condition)) {
+      $running_tests[] = $test;
+    }
+  }
+
+  return $running_tests;
+}
+
+/**
+ * Get a list of enabled studies.
+ * 
+ * NOTE that enabled studies are not the ones that should also run in current
+ * context. If you need running studies in current context use
+ * multivariate_get_running_studies().
+ *
+ * @return array
+ *   Array of all tests.
+ */
+function multivariate_get_enabled() {
+  static $tests = array();
+
+  if (!empty($tests)) {
+    return $tests;
+  }
+
+  // We are manually loading here enabled multivariate tests because this part
+  // of code needs to work on hook_boot() which is very early and not all parts
+  // of system are initialized.
+  // For example we will get
+  //
+  //   Fatal error: Call to undefined method stdClass::is_type() in
+  //   .../ctools/includes/context.inc on line 137
+  //
+  // Check multivariate_get_running_studies() for explanation.
+  $tests = db_query("SELECT * FROM {multivariate_test} WHERE enabled = 1")->fetchAll();
+  foreach ($tests as $key => $test) {
+    $tests[$key]->run_condition = unserialize($tests[$key]->run_condition);
+    $tests[$key]->variants_set = unserialize($tests[$key]->variants_set);
+    $tests[$key]->success_condition = unserialize($tests[$key]->success_condition);
+  }
+  return $tests;
+}
+
+/**
+ * Get mutations from assigned combination of sets/variants for current user
+ * session.
+ * 
+ * @param object $test
+ *   Multivariate test.
+ * @param int $set_id
+ *   Set id in given multvariate study object.
+ * 
+ * @return array
+ *   Array of assigned variants from choosen set.
+ */
+function multivariate_get_assigned_mutations($test, $set_id) {
+  $assigned_test = multivariate_get_assigned_test($test);
+  // Check if this assigned test exist.
+  if (!isset($test->variants_set[$set_id])
+   || !isset($assigned_test[$set_id])
+   || !isset($test->variants_set[$set_id]['variants'][$assigned_test[$set_id]]['mutations'])) {
+    // Assigned test do not exist any more - variants are probably changed in
+    // the meantime. We will clear current assigned test and assign new one to
+    // this user.
+    unset($_COOKIE['multivariate_' . $test->mtid]);
+    $assigned_test = multivariate_get_assigned_test($test);
+  }
+  return $test->variants_set[$set_id]['variants'][$assigned_test[$set_id]]['mutations'];
+}
+
+/**
+ * Get assigned test of given multivariate test study for current user session.
+ *
+ * Test is a one unique combination of sets variants in this study.
+ *
+ * @param object $test
+ *   Multivariate test.
+ * @param bool $create_new
+ *   TRUE if user doesn't have assigned test and you want to create new test 
+ *   assign for him - then new assign will be created and returned.
+ * 
+ * @return array
+ *   of assigned test information. Array provides assigned set/variant 
+ *   combination for each set in this test study. Assignes are keyed by the set
+ *   element as shown in the example below.
+ *   @code
+ *     array(
+ *       'mutation_id', // Internal ID given to the unique mutation set.
+ *       'completed',   // Boolean indicating if this test combination has 
+ *                      // already reached it success case.
+ *       0 => 1, // set 0 has assigned variant 1.
+ *       1 => 3, // set 1 has assigned variant 3.
+ *       2 => 0, // set 2 has assigned variant 0.
+ *     );
+ *   @endcode
+ *   If $create_new is FALSE and user do not have assign NULL will be returned.
+ */
+function multivariate_get_assigned_test($test, $create_new = TRUE) {
+  global $cookie_domain;
+
+  // Is this test manually overriden?
+  if (isset($_COOKIE['multivariate_' . $test->mtid . '_override'])) {
+    $binary = multivariate_mutation_correct(decbin($_COOKIE['multivariate_' . $test->mtid . '_override']), $test);
+    $assigned_test = array(
+      'mutation_id' => (int) $_COOKIE['multivariate_' . $test->mtid . '_override'],
+      'completed' => FALSE,
+    );
+    $assigned_test += multivariate_mutation_parse($test, $binary);
+    return $assigned_test;
+  }
+
+  // If we still didn't assign variant combination for this multivariate study
+  // then lets assign variant combination from this study that is least used.
+  if (!($assigned_test = _multivariate_has_assigned_test($test->mtid)) && $create_new) {
+    $choice = multivariate_mutation_choose($test->mtid);
+    $binary = multivariate_mutation_correct(decbin($choice), $test);
+    $assigned_test = array(
+      // @todo d7. cleaning - this should be mutation_id -> mcid
+      'mutation_id' => $choice,
+      'completed' => FALSE,
+    );
+    $assigned_test += multivariate_mutation_parse($test, $binary);
+    $serialized_test = serialize($assigned_test);
+    // @todo: Instead of setting serialized PHP value in cookie we should
+    // maybe serialize json data or more simple structure - it should require
+    // less space and json we will maybe be able to reuse on js client side.
+    // Aditional note: Do this for D7 port because we have there
+    // drupal_json_encode() and drupal_json_decode().
+    setcookie('multivariate_' . $test->mtid, $serialized_test, MULTIVARIATE_COOKIE_DURATION, '/', $cookie_domain);
+    $_COOKIE['multivariate_' . $test->mtid] = $serialized_test;
+  }
+
+  return $assigned_test;
+}
+
+/**
+ * Parse a binary variation based on the definition.
+ *
+ * @param object $test
+ *   Multivariate test.
+ * @param string $binary
+ *   Binary variation.
+ * 
+ * @return array
+ *   Parsed variation.
+ */
+function multivariate_mutation_parse($test, $binary) {
+  $variation = array();
+  $offset = 0;
+  $i = 0;
+  foreach ($test->variants_set as $set) {
+    $state_count = count($set['variants']);
+    for ($state = 0; $state < $state_count; $state++) {
+      if ($binary[$offset + $state]) {
+        $variation[$i] = $state;
+        break;
+      }
+    }
+    $offset += $state_count;
+    $i++;
+  }
+  return $variation;
+}
+
+/**
+ * Check if current user session has assigned multivariate test variants
+ * combination for the given test.
+ *
+ * @param int $mtid
+ *   Multivariate test id.
+ * 
+ * @return mixed
+ *   Unserialized multivariate test cookie which is array that hold assigned
+ *   test information for current user session or FALSE if cookie doesn't exist.
+ */
+function _multivariate_has_assigned_test($mtid) {
+  if (isset($_COOKIE['multivariate_' . $mtid])) {
+    return unserialize($_COOKIE['multivariate_' . $mtid]);
+  }
+  return FALSE;
+}
+
+/**
+ * Correct the removal of leading zeros by adding them back.
+ *
+ * @param string $binary
+ *   Binary string representing variation.
+ * @param object $test
+ *   Multivariate study node.
+ * 
+ * @return string
+ *   Corrected binary string.
+ */
+function multivariate_mutation_correct($binary, $test) {
+  // Caclulate the total number of binary digits that should be in the string.
+  $total = 0;
+  foreach ($test->variants_set as $set) {
+    $total += count($set['variants']);
+  }
+
+  // Determine if the string has been chopped and add back and missing zeros.
+  if ($chopped = $total - strlen($binary)) {
+    $binary = implode('', array_fill(0, $chopped, '0')) . $binary;
+  }
+  return $binary;
+}
+
+/**
+ * Choose a variants combination from the least used variants combinations.
+ *
+ * @param int $mtid
+ *   Multivariate id.
+ * 
+ * @return int
+ *   Variants combination represented as an integer.
+ */
+function multivariate_mutation_choose($mtid) {
+  // Get a list of the least used mutations.
+  $result = db_query('SELECT mcid
+    FROM {multivariate_combination}
+    WHERE mtid = :mtid
+    AND count = (SELECT MIN(count) FROM {multivariate_combination} WHERE mtid = :mtid)',
+    array(':mtid' => $mtid));
+  $available = array_keys($result->fetchAllAssoc('mcid'));
+
+  // Choose one of variants combinations that are available.
+  $choice = $available[mt_rand(0, count($available) - 1)];
+
+  // Record the choice.
+  db_query('UPDATE {multivariate_combination}
+    SET count = count + 1
+    WHERE mtid = :mtid
+    AND mcid = :mcid',
+    array(':mtid' => $mtid, ':mcid' => $choice)
+  );
+
+  return $choice;
+}
+
+/**
+ * Check if path is matching with current system path or it's path alias.
+ *
+ * @param string $path
+ *   System path or path alias we want to match.
+ * 
+ * @return bool
+ *   TRUE if path is matching current system path.
+ */
+function multivariate_match_current_path($path) {
+  static $paths;
+  if (!$paths) {
+    // Get the system path and any aliases for the curent path.
+    $paths = array($_GET['q'], drupal_get_path_alias($_GET['q']));
+  }
+  return multivariate_match_path($paths, $path);
+}
+
+/**
+ * This function will be removed soon.
+ * 
+ * @param array $uri_paths
+ * @param string $match_path
+ * 
+ * @return bool
+ */
+function multivariate_match_path($uri_paths = array(), $match_path) {
+  $match = FALSE;
+  foreach ($uri_paths as $uri) {
+    if (drupal_match_path($match_path, $uri)) {
+      $match = TRUE;
+    }
+  }
+  return $match;
+}
+
+/**
+ * Disable Drupal caching for current page request and also clears current
+ * cached path in cache_page table.
+ *
+ * @todo, as alternativ to this cache problem solution we could do next thing.
+ * We could implement our own cache.inc and there check for our mutation
+ * condition. Check http://drupal.org/project/cache_disable for example how it
+ * can be done.
+ * It is more complex solution. But one benefith of having our own page cache
+ * is that we could change how page caching works - instead of using only path
+ * for cache cid we could append current active mutation id - this would be
+ * very cool if it is possible because we could have in the same time working
+ * mutations and page caching.
+ */
+function multivariate_disable_cache() {
+  global $base_root;
+
+  // Disable page cache creation for this path.
+  drupal_page_is_cacheable(FALSE);
+
+  // And clear page cache for this path if it was generated before.
+  // If page cahe do exist for this path this is too late
+  // for this current request (because user will be served with cached
+  // page in DRUPAL_BOOTSTRAP_LATE_PAGE_CACHE), but anyway we need to
+  // clear it so on next request Drupal will generate full page and
+  // not load it from cache.
+  cache_clear_all($base_root . request_uri(), 'cache_page');
+}
+
+/**
+ * Calculate the possible variations and store them.
+ *
+ * @param object $test
+ *   Node object to calculate variations for.
+ */
+function multivariate_calculate_combinations($test, $new = FALSE) {
+  $test_old = multivariate_load($test->mtid);
+  // @todo - this conditions needs to be improved.
+  if ($new
+      || !isset($test_old->variants_set)
+      || $test->run_condition != $test_old->run_condition
+      || $test->variants_set != $test_old->variants_set
+      || ($test->success_condition != $test_old->success_condition)) {
+    db_query('DELETE FROM {multivariate_combination} WHERE mtid = :mtid', array(':mtid' => $test->mtid));
+
+    $binary = multivariate_calculate_binary($test->variants_set);
+    foreach ($binary as $state) {
+      $combination_id = bindec($state);
+      db_query('INSERT INTO {multivariate_combination} (mtid, mcid, count, success)
+        VALUES (:mtid, :mcid, :count, :success)',
+        array(':mtid' => $test->mtid, ':mcid' => $combination_id, ':count' => 0, ':success' => 0));
+    }
+  }
+}
+
+/**
+ * Calculate the binary representations of each mutation.
+ * 
+ * Purpose of this is to get unique ids for all possible mutations combinations 
+ * of all variants in all sets.
+ * Meaning that if some multivariate study has 3 sets, and
+ *   set 0 has 2 variants, where variants has 3 mutations
+ *   set 1 has 2 variants, weher variants has 2 mutations
+ * Number of all mutation combinations is 3*2=6. This function will in this
+ * case return array of binary ids for each unique mutation.
+ *
+ * @param array $sets
+ *   List of sets.
+ * @param int $active
+ *   Hepler for finding current active set order number - starting from 0. Used 
+ *   to find current set we are working on.
+ * 
+ * @return array
+ *   Set of binary representations.
+ */
+function multivariate_calculate_binary($sets, $active = 0) {
+  $binary = array();
+
+  // Find the active set key.
+  $active_key = array_keys($sets);
+  $active_key = $active_key[$active];
+
+  $state_count = count($sets[$active_key]['variants']);
+  $base = implode('', array_fill(0, $state_count, '0'));
+  // Cycle through the state of the mutation.
+  for ($state = 0; $state < $state_count; $state++) {
+    $prefix = $base;
+    $prefix[$state] = '1';
+
+    if ($active < count($sets) - 1) {
+      $subs = multivariate_calculate_binary($sets, $active + 1);
+      foreach ($subs as $sub) {
+        $binary[] = $prefix . $sub;
+      }
+    }
+    else {
+      $binary[] = $prefix;
+    }
+  }
+  return $binary;
+}
+
+/**
+ * Proccess mutation url * operator.
+ * 
+ * If mutation path has * operator we need to change that operator with values 
+ * from current URL. Pattern for this should be set in condition paths - for 
+ * now only one path in codition is supported!
+ * 
+ * @param object $test
+ *   Multuvariate test.
+ * @param string $mutation_path 
+ *   Mutation path with * operator.
+ */
+function multivariate_process_url_operator($test, $mutation_path) {
+  foreach ($test->run_conditions['plugins'] as $key => $plugin) {
+    // Consider only path plugins without not switch because not switch for
+    // path conditions should be used to exclude variants path.
+    if (!$plugin['not'] && strpos($plugin['settings']['paths'], '*') !== FALSE) {
+      // @todo - here we assume that only one path will be defined for paths
+      // value, we do not support more then one path for now. Do we need to
+      // fix this?
+      $condition_path = $plugin['settings']['paths'];
+      break;
+    }
+  }
+
+  if (!isset($condition_path)) {
+    return $mutation_path;
+  }
+
+  // Do regular search for * operator in current system path and then replace
+  // all matches with * operator in mutation path.
+  // Regexp pattern will be buid from condition path url.
+  $pattern = '@' . str_replace('*', '(.*)', $condition_path) . '@';
+  $base_path = drupal_get_path_alias($_GET['q']);
+  if (preg_match($pattern, $base_path, $matches)) {
+    // First match is text that match the full pattern and we do not need it.
+    array_shift($matches);
+    // Now build regexp pattern for * operator in mutation path and replace all
+    // ocurence of operator with matched values.
+    $search = array_fill(0, count($matches), '@\*@');
+    $mutation_path = preg_replace($search, $matches, $mutation_path, 1);
+  }
+  return $mutation_path;
+}
+
+/**
+ * Get prepared result data for multivariate test.
+ * 
+ * @param object $test 
+ *   Multivariate test.
+ * 
+ * @return array
+ *   Array of prepared test results.
+ */
+function multivariate_get_results($test) {
+  $data = array();
+  $results = db_query('SELECT mcid, count, success FROM {multivariate_combination} WHERE mtid = :mtid', array(':mtid' => $test->mtid));
+  foreach ($results as $result) {
+    $binary = multivariate_mutation_correct(decbin($result->mcid), $test);
+    $mutations = multivariate_mutation_parse($test, $binary);
+
+    $labels = array();
+    foreach ($mutations as $set_id => $variant_id) {
+      $labels[] = theme('multivariate_result_label', array('test' => $test, 'set_id' => $set_id, 'variant_id' => $variant_id));
+    }
+
+    $data[$result->mcid] = array(
+      'mutations' => $mutations,
+      'count' => $result->count,
+      'success' => $result->success,
+      'ratio' => $result->count != 0 ? $result->success / $result->count : 0,
+      'labels' => theme('multivariate_result_labels', array('labels' => $labels)),
+    );
+  }
+  return $data;
+}

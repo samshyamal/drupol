@@ -1,0 +1,130 @@
+<?php
+
+/**
+ * @file
+ * Install/uninstall module functions. 
+ */
+
+/**
+ * Drop multivariate_success obsolete db table which is not used any more.
+ */
+function multivariate_update_7002() {
+  db_drop_table('multivariate_success');
+}
+
+/**
+ * Menu item permissions are changed so we need to clear menu cache.
+ */
+function multivariate_update_7001() {
+  menu_cache_clear_all();
+}
+
+/**
+ * Implements hook_schema().
+ */
+function multivariate_schema() {
+  $schema = array();
+
+  $schema['multivariate_test'] = array(
+    'description' => 'The base table for multivariate test.',
+    'fields' => array(
+      'mtid' => array(
+        'description' => 'The primary identifier for the multivariate test.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'title' => array(
+        'description' => 'The title of the multivariate study.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'uid' => array(
+        'description' => 'ID of Drupal user creator.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'created' => array(
+        'description' => 'The Unix timestamp when the multivariate study was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'changed' => array(
+        'description' => 'The Unix timestamp when the multivariate study was most recently saved.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'description' => array(
+        'description' => 'Multivariate study description.',
+        'type' => 'text',
+      ),
+      'enabled' => array(
+        'description' => 'Test is enabled.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'run_condition' => array(
+        'type' => 'text',
+        'not null' => FALSE,
+        'size' => 'big',
+        'description' => 'A serialized array of test run ctools context access conditions.',
+      ),
+      'variants_set' => array(
+        'type' => 'text',
+        'not null' => FALSE,
+        'size' => 'big',
+        'description' => 'A serialized array of variants sets.',
+      ),
+      'success_condition' => array(
+        'type' => 'text',
+        'not null' => FALSE,
+        'size' => 'big',
+        'description' => 'A serialized array of success conditions.',
+      ),
+    // @todo - do we need this?
+    ) + entity_exportable_schema_fields(),
+    'primary key' => array('mtid'),
+  );
+
+  $schema['multivariate_combination'] = array(
+    'description' => 'Stores calculated variants combinations and its results.',
+    'fields' => array(
+      'mtid' => array(
+        'description' => 'Reference to multivariate test.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'mcid' => array(
+        'description' => 'The unique identifier for the multivariate  combination across all sets.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'count' => array(
+        'description' => 'The number of times the multivariate combination has been used.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'success' => array(
+        'description' => 'The number of times the multivariate combination has been successful.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'indexes' => array(
+      'mtid' => array('mtid'),
+    ),
+    'primary key' => array('mtid', 'mcid'),
+  );
+
+  return $schema;
+}

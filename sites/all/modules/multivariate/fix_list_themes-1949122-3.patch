@@ -1,0 +1,17 @@
+diff --git a/multivariate.module b/multivariate.module
+index d15c5ca..13e8b63 100644
+--- a/multivariate.module
++++ b/multivariate.module
+@@ -295,6 +295,12 @@ function multivariate_initialize_drupal() {
+     // drupal_get_path_alias().
+     require_once DRUPAL_ROOT . '/' . variable_get('path_inc', 'includes/path.inc');
+ 
++    // We are including theme.inc and file.inc so any ctools plugins using
++    // list_themes() won't throw a Fatal error.
++    // @SEE https://www.drupal.org/node/1949122
++    require_once DRUPAL_ROOT . '/includes/theme.inc';
++    require_once DRUPAL_ROOT . '/includes/file.inc';
++
+     // We are including commons.inc because ctools_access will need
+     // drupal_get_path().
+     require_once DRUPAL_ROOT . '/includes/common.inc';
